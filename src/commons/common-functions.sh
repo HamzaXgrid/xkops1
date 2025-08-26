@@ -188,30 +188,52 @@ get_eks_cluster_name() {
 
 # The wrapper_function ensures that the deployment and pods in a namespace are fully operational by waiting for them to be in a running state.
 validate_healthy_deployment() {
-  while true; do
-    dc=$(kubectl get deployments -n "$1" -o jsonpath='{.items[*].metadata.name}' | cut -d'%' -f1 | wc -w)
+  local namespace=$1
+  
+  log "${CYAN}[INFO]" "[DEPLOYMENT]" "Waiting for deployments to be available in namespace: $namespace${CC}"
+  
+  # Wait for deployments to be available (more efficient than polling)
+  if kubectl wait --for=condition=available deployment --all -n "$namespace" --timeout=600s 2>/dev/null; then
+    log "${GREEN}[PASSED]" "[DEPLOYMENT]" "All deployments are available in namespace: $namespace${CC}"
+  else
+    log "${RED}[ERROR]" "[DEPLOYMENT]" "Timeout waiting for deployments in namespace: $namespace${CC}"
+    return 1
+  fi
+  
+  # Wait for pods to be ready (more efficient than individual pod polling)
+  if kubectl wait --for=condition=ready pod --all -n "$namespace" --timeout=600s 2>/dev/null; then
+    log "${GREEN}[PASSED]" "[DEPLOYMENT]" "All pods are ready in namespace: $namespace${CC}"
+  else
+    log "${CYAN}[INFO]" "[DEPLOYMENT]" "Some pods may not be ready, checking individual pod status...${CC}"
+    
+    # Fallback: Check individual pods if batch wait fails
+    local pods
+    pods=$(kubectl get pods -n "$namespace" -o jsonpath='{.items[*].metadata.name}' 2>/dev/null)
+    
+    for pod in $pods; do
+      local status
+      status=$(kubectl get pods "$pod" -n "$namespace" -o jsonpath='{.status.phase}' 2>/dev/null)
+      
+      if [[ $status == "Succeeded" || $status == "Running" ]]; then
+        log "${GREEN}[PASSED]" "[DEPLOYMENT]" "Pod $pod is in $status state${CC}"
+      else
+        log "${RED}[ERROR]" "[DEPLOYMENT]" "Pod $pod is in $status state${CC}"
+      fi
+    done
+  fi
+}
 
-    # Check to see if atleast one deployment can be found in the namespace.
-    if [ "$dc" -gt 0 ]; then
-      pods=$(kubectl get pods -n "$1" -o jsonpath='{.items[*].metadata.name}' | cut -d'%' -f1)
-      for pod in $pods; do
-        while true; do
-          status=$(kubectl get pods "$pod" -n "$1" -o jsonpath='{.status.phase}')
-
-          # Check if Pods Phase reached running or succeeded.
-          if [[ $status == "Succeeded" || $status == "Running" ]]; then
-            log "Pod $pod reached the desired status: $status" 1> /dev/null
-            break
-          else
-            log "Waiting for pod $pod to reach the desired status: $status" 1> /dev/null
-          fi
-        done
-      done
-      break
-    else
-      log "Waiting for deployments to become available." 1> /dev/null
-    fi
-done
+# Optimized function to get batch status information with fewer kubectl calls
+get_batch_deployment_status() {
+  local namespace=$1
+  
+  # Single kubectl call to get both deployments and pods information
+  kubectl get deployments,pods -n "$namespace" -o json 2>/dev/null | jq -r '
+    {
+      deployments: [.items[] | select(.kind=="Deployment") | .metadata.name],
+      pods: [.items[] | select(.kind=="Pod") | {name: .metadata.name, phase: .status.phase}]
+    }
+  ' 2>/dev/null
 }
 
 unpatch_default_storageclass() {

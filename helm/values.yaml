@@ -40,11 +40,11 @@ dashboard_image:
 # Define the resource requirements and limits for the container
 xkops_resources:
   limits:
-    cpu: "500m"
-    memory: "200Mi"
+    cpu: "1000m"
+    memory: "512Mi"
   requests:
-    cpu: "100m"
-    memory: "128Mi"
+    cpu: "250m"
+    memory: "256Mi"
 
 # Set up the volume mount for xkops
 xkops_volumeMounts:
