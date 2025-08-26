@@ -15,12 +15,43 @@
 const express = require('express')
 const request = require('request')
 const path = require('path')
+const NodeCache = require('node-cache')
 const app = express()
+
+// Initialize cache with 5 minute default TTL
+const cache = new NodeCache({ stdTTL: 300 })
 const allowCrossDomain = function (req, res, next) {
   res.header('Access-Control-Allow-Origin', '*')
   res.header('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE')
   res.header('Access-Control-Allow-Headers', 'Content-Type')
   next()
+}
+
+// Caching middleware for GET requests
+const cacheMiddleware = (duration = 300) => {
+  return (req, res, next) => {
+    // Only cache GET requests
+    if (req.method !== 'GET') {
+      return next()
+    }
+    
+    const key = req.originalUrl
+    const cached = cache.get(key)
+    
+    if (cached) {
+      console.log(`Cache hit for ${key}`)
+      return res.send(cached)
+    }
+    
+    // Override res.send to cache the response
+    res.originalSend = res.send
+    res.send = (body) => {
+      cache.set(key, body, duration)
+      console.log(`Cached response for ${key}`)
+      res.originalSend(body)
+    }
+    next()
+  }
 }
 
 // Allow cross-origin requests
@@ -31,7 +62,7 @@ app.use(express.json())
 app.use(express.static('build'))
 
 // Sends a GET request to retrieve information about all persistent volumes from a Kubernetes cluster using the Kubecost API.
-app.get('/allPersistentVolumes', (req, res) => {
+app.get('/allPersistentVolumes', cacheMiddleware(300), (req, res) => {
   const options = {
     url: 'http://kubecost-cost-analyzer.kubecost.svc.cluster.local:9003/allPersistentVolumes',
     headers: {

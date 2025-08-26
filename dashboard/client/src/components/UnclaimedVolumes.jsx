@@ -12,54 +12,84 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import React, { Component } from 'react'
+import React, { useState, useEffect, useMemo, memo } from 'react'
 import VolumeTable from './VolumeTable'
 import './VolumeTable.css'
 import './unclaimedVolume.css'
 
-// A React class component that displays a list of unclaimed volumes and a table of details about them.
-class UnclaimedVolumes extends Component {
-  // Constructor function that initializes the component's state with an empty array for the list of unclaimed volumes.
-  constructor (props) {
-    super(props)
-    this.state = {
-      records: []
+// A React functional component that displays a list of unclaimed volumes and a table of details about them.
+const UnclaimedVolumes = memo(() => {
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  // Fetch data when component mounts with error handling and loading state
+  useEffect(() => {
+    const fetchVolumes = async () => {
+      try {
+        setLoading(true)
+        const response = await fetch('/allPersistentVolumes')
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        const unclaimedVolumes = data.items?.filter(record => record.status.phase === 'Available') || []
+        setRecords(unclaimedVolumes)
+        setError(null)
+      } catch (err) {
+        console.error('Error fetching volumes:', err)
+        setError(err.message)
+        setRecords([])
+      } finally {
+        setLoading(false)
+      }
     }
-  }
 
-  // Lifecycle method that fetches data from the server when the component mounts, and updates the component's state with the unclaimed volumes.
-  async componentDidMount () {
-    fetch('/allPersistentVolumes')
-      .then(response => response.json())
-      .then(records => {
-        this.setState({
-          records: records.items.filter(record => record.status.phase === 'Available')
-        })
-      })
-      .catch(error => console.log(error))
-  }
+    fetchVolumes()
+  }, [])
 
-  // Renders the list of unclaimed volumes as an unordered list.
-  renderListing () {
-    const recordList = []
-    this.state.records.map(record => {
-      return recordList.push(<li key={record.metadata.name}>{record.metadata.name}</li>)
-    })
+  // Memoize the filtered records to avoid unnecessary re-renders
+  const memoizedRecords = useMemo(() => records, [records])
 
-    return recordList
-  }
-
-  // Renders the component's content, including the header and table of unclaimed volumes.
-  render () {
+  // Loading state
+  if (loading) {
     return (
       <div>
         <h1 className='header'>XkOps - Unclaimed Volumes</h1>
         <div className='table-container'>
-          <VolumeTable records={this.state.records} />
+          <div style={{ textAlign: 'center', padding: '20px' }}>Loading volumes...</div>
         </div>
       </div>
     )
   }
-}
+
+  // Error state
+  if (error) {
+    return (
+      <div>
+        <h1 className='header'>XkOps - Unclaimed Volumes</h1>
+        <div className='table-container'>
+          <div style={{ textAlign: 'center', padding: '20px', color: 'red' }}>
+            Error loading volumes: {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Renders the component's content, including the header and table of unclaimed volumes.
+  return (
+    <div>
+      <h1 className='header'>XkOps - Unclaimed Volumes</h1>
+      <div className='table-container'>
+        <VolumeTable records={memoizedRecords} />
+      </div>
+    </div>
+  )
+})
+
+UnclaimedVolumes.displayName = 'UnclaimedVolumes'
 
 export default UnclaimedVolumes

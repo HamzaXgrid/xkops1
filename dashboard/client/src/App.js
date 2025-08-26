@@ -12,22 +12,39 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {
-  Navigation,
-  Home,
-  UnclaimedVolumes
-} from './components'
+import { lazy, Suspense } from 'react'
+import { Navigation } from './components'
 import { Route, Routes } from 'react-router-dom'
+
+// Lazy load components for better performance
+const Home = lazy(() => import('./components/Home'))
+const UnclaimedVolumes = lazy(() => import('./components/UnclaimedVolumes'))
+
+// Loading component for suspense fallback
+const LoadingSpinner = () => (
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    height: '200px',
+    fontSize: '18px',
+    color: '#666'
+  }}>
+    Loading...
+  </div>
+)
 
 // App function which tells how to render the application like Navigation and Routes
 function App () {
   return (
     <>
       <Navigation />
-      <Routes>
-        <Route path='/' element={<Home />} />
-        <Route path='/unclaimed-volumes' element={<UnclaimedVolumes />} />
-      </Routes>
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          <Route path='/' element={<Home />} />
+          <Route path='/unclaimed-volumes' element={<UnclaimedVolumes />} />
+        </Routes>
+      </Suspense>
     </>
   )
 }

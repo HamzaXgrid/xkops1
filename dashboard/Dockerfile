@@ -12,39 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Use the official Node.js 16 image as the base image
-FROM node:16
+# Stage 1: Build React app
+FROM node:16-alpine AS builder
 
-# Set the working directory to /app
 WORKDIR /app
 
-#Copy React.js app to /app/client
-COPY client ./client
-
-# Set the working directory to /app/client
+# Copy React app package files
+COPY client/package*.json ./client/
 WORKDIR /app/client
 
-# # Install the dependencies for the React.js app 
-# # Build the React.js app
-RUN npm install && npm run build
+# Install dependencies and build React app
+RUN npm ci --only=production && npm run build
 
-# Set the working directory to /app
+# Stage 2: Production Node.js server
+FROM node:16-alpine AS production
+
 WORKDIR /app
 
-#Move the React.js app build to /app
-RUN mv ./client/build ./build
-
-# # Remove the React.js app directory
-RUN rm -rf ./client
-
-# Copy the package.json and package-lock.json files from the api directory
+# Copy API package files and install dependencies
 COPY api/package*.json ./
+RUN npm ci --only=production
 
-# Install the dependencies for the Node.js app
-RUN npm install
-
-# Copy the Node.js app's code to the image
+# Copy API source code
 COPY api .
+
+# Copy built React app from builder stage
+COPY --from=builder /app/client/build ./build
 
 # Expose port 3000 for the Node.js app
 EXPOSE 3000

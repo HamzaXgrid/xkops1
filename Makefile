@@ -110,9 +110,11 @@ kc_rollback:
 	$(INTERPRETER) $(KC_ROLLBACK) || echo "KC_ROLLBACK Exit 1"
 
 #target to install all tools
-all:
-	$(MAKE) rb_all
-	$(MAKE) kc_all
+all: rb_all kc_all
+
+# Parallel installation target for faster deployment
+parallel_install:
+	$(MAKE) -j2 rb_all kc_all
 
 #target to remove all tools from cluster
 rollback_all:
